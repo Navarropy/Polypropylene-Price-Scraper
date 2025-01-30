@@ -18,18 +18,15 @@ date_picker = WebDriverWait(driver, 20).until(
     EC.element_to_be_clickable((By.XPATH, '//*[@id="iChartHeader-datePicker-button"]'))
 )
 date_picker.click()
-
 start_input = WebDriverWait(driver, 20).until(
     EC.presence_of_element_located((By.XPATH, '//*[@id="start"]'))
 )
 start_input.clear()
 start_input.send_keys("2014-01-01")
-
 end_input = driver.find_element(By.XPATH, '//*[@id="end"]')
 end_input.clear()
 end_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 end_input.send_keys(end_date)
-
 ok_button = driver.find_element(By.XPATH, '//*[@id="btnOK"]')
 ok_button.click()
 
@@ -48,7 +45,7 @@ time.sleep(1)
 # Get chart dimensions relative to the page
 chart_rect = driver.execute_script("return arguments[0].getBoundingClientRect();", chart)
 start_x = chart_rect['left'] + 10  # Start 10px inside chart's left edge
-end_x = chart_rect['right'] - 10    # End 10px before chart's right edge
+end_x = chart_rect['right'] - 10   # End 10px before chart's right edge
 y_position = chart_rect['top'] + (chart_rect['height'] / 2)  # Vertical center
 
 # Configure scanning parameters
@@ -65,9 +62,11 @@ current_x = start_x
 while current_x <= end_x:
     try:
         # Move mouse to current position
-        actions.move_by_offset(current_x - driver.execute_script("return window.pageXOffset;"), 
-                             y_position - driver.execute_script("return window.pageYOffset;")).pause(0.1).perform()
-        
+        actions.move_by_offset(
+            current_x - driver.execute_script("return window.pageXOffset;"),
+            y_position - driver.execute_script("return window.pageYOffset;")
+        ).pause(0.1).perform()
+
         # Extract tooltip data
         date_element = WebDriverWait(driver, 0.5).until(
             EC.visibility_of_element_located((By.XPATH, '//*[@class="yLabelDrag"]'))
@@ -75,7 +74,6 @@ while current_x <= end_x:
         value_element = WebDriverWait(driver, 0.5).until(
             EC.visibility_of_element_located((By.XPATH, '//*[@id="iChart-bodyLabels-cnt"]/div[2]/span[2]/span[1]'))
         )
-        
         current_date = date_element.text.strip()
         current_value = value_element.text.strip()
 
