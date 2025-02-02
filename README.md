@@ -4,7 +4,7 @@ A Selenium-based automation tool that collects historical polypropylene price da
 
 ## Features
 
-- 📅 Automated date range selection (2014-01-01 to 3 days before current date)
+- 📅 Automated date range selection (2014-01-01 to 10 days before current date)
 - 📈 Dynamic chart interaction with mouse movement simulation
 - 🚀 Adaptive scanning speed (slows down for data points, speeds up in empty areas)
 - 📊 Outputs structured CSV data with date-value pairs
