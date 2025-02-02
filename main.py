@@ -12,6 +12,7 @@ import json
 driver = webdriver.Chrome()
 driver.maximize_window()
 driver.get("https://tradingeconomics.com/commodity/polypropylene")
+start = "2014-01-01"
 
 # Set date range (2014-01-01 to Today -3 days)
 date_picker = WebDriverWait(driver, 20).until(
@@ -22,10 +23,10 @@ start_input = WebDriverWait(driver, 20).until(
     EC.presence_of_element_located((By.XPATH, '//*[@id="start"]'))
 )
 start_input.clear()
-start_input.send_keys("2014-01-01")
+start_input.send_keys(start)
 end_input = driver.find_element(By.XPATH, '//*[@id="end"]')
 end_input.clear()
-end_date = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+end_date = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
 end_input.send_keys(end_date)
 ok_button = driver.find_element(By.XPATH, '//*[@id="btnOK"]')
 ok_button.click()
@@ -77,6 +78,8 @@ while current_x <= end_x:
         current_date = date_element.text.strip()
         current_value = value_element.text.strip()
 
+        if not current_date: continue
+
         if current_date != previous_date:
             data.append((current_date, current_value))
             previous_date = current_date
@@ -98,9 +101,9 @@ while current_x <= end_x:
 
 # Save data to CSV
 print(f"\nTotal records captured: {len(data)}")
-with open('polypropylene_prices.json', 'w') as file:
-    # Convert tuple data to dictionary format for JSON
-    json_data = [{"date": date, "value": value} for date, value in data]
-    json.dump(json_data, file, indent=2)
+with open('polypropylene_prices.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(['Date', 'Value'])  # Write header row
+    writer.writerows(data)  # Write all data rows
 
 driver.quit()
