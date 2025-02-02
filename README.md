@@ -7,7 +7,7 @@ A Selenium-based automation tool that collects historical polypropylene price da
 - 📅 Automated date range selection (2014-01-01 to 3 days before current date)
 - 📈 Dynamic chart interaction with mouse movement simulation
 - 🚀 Adaptive scanning speed (slows down for data points, speeds up in empty areas)
-- 📊 Outputs structured JSON data with date-value pairs
+- 📊 Outputs structured CSV data with date-value pairs
 - ✅ Real-time progress tracking and duplicate prevention
 
 ## Requirements
@@ -48,20 +48,14 @@ The script will:
 1. Open Chrome browser and navigate to Trading Economics
 2. Set date range automatically
 3. Scan the price chart
-4. Output `polypropylene_prices.json` with collected data
+4. Output `polypropylene_prices.CSV` with collected data
 
 Sample output:
-```json
-[
-  {
-    "date": "Mar 01 2020",
-    "value": "7321.0"
-  },
-  {
-    "date": "Mar 02 2020",
-    "value": "7345.0"
-  }
-]
+```csv
+Mar 25 2014,10897
+Mar 28 2014,10994
+Apr 03 2014,11175
+Apr 09 2014,11199
 ```
 
 ## Configuration
@@ -101,7 +95,7 @@ except:
 Typical results:
 - ⏱️ 10-15 minutes for full historical range
 - 📈 500-700 data points collected
-- 💾 20-30KB JSON file output
+- 💾 20-30KB  CSV file output
 
 ## License
 
