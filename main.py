@@ -2,108 +2,141 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
-from datetime import datetime, timedelta
-import csv
 import time
-import json
+import csv
 
-# Initialize WebDriver
+# Initialize browser
 driver = webdriver.Chrome()
 driver.maximize_window()
-driver.get("https://tradingeconomics.com/commodity/polypropylene")
-start = "2014-01-01"
 
-# Set date range (2014-01-01 to Today -3 days)
-date_picker = WebDriverWait(driver, 20).until(
-    EC.element_to_be_clickable((By.XPATH, '//*[@id="iChartHeader-datePicker-button"]'))
-)
-date_picker.click()
-start_input = WebDriverWait(driver, 20).until(
-    EC.presence_of_element_located((By.XPATH, '//*[@id="start"]'))
-)
-start_input.clear()
-start_input.send_keys(start)
-end_input = driver.find_element(By.XPATH, '//*[@id="end"]')
-end_input.clear()
-end_date = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
-end_input.send_keys(end_date)
-ok_button = driver.find_element(By.XPATH, '//*[@id="btnOK"]')
-ok_button.click()
+try:
+    # Load main page
+    driver.get("https://businessanalytiq.com/procurementanalytics/index/pvc-price-index/")
 
-# Wait for chart to load
-time.sleep(5)
+    # Create visual indicator directly in the iframe
+    iframe = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='datastudio']"))
+    )
+    
+    # Store iframe position before switching
+    iframe_rect = driver.execute_script("""
+        const rect = arguments[0].getBoundingClientRect();
+        return {
+            left: rect.left + window.pageXOffset,
+            top: rect.top + window.pageYOffset,
+            width: rect.width,
+            height: rect.height
+        };
+    """, iframe)
 
-# Locate the chart container
-chart = WebDriverWait(driver, 20).until(
-    EC.presence_of_element_located((By.XPATH, '//*[@dir="ltr"]'))
-)
+    # Switch to iframe and set up elements
+    driver.switch_to.frame(iframe)
+    
+    # Add visual indicator inside iframe
+    driver.execute_script("""
+        const dot = document.createElement('div');
+        dot.id = 'hoverDot';
+        dot.style = 'position: fixed; width: 8px; height: 8px; background: red;'
+                  + 'border-radius: 50%; z-index: 99999; display: none;'
+                  + 'box-shadow: 0 0 5px red; pointer-events: none;';
+        document.body.appendChild(dot);
+    """)
 
-# Scroll chart into view
-driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", chart)
-time.sleep(1)
+    # Wait for chart elements
+    chart = WebDriverWait(driver, 30).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.ng2-canvas-container.grid"))
+    )
+    chart_rect = driver.execute_script("return arguments[0].getBoundingClientRect();", chart)
 
-# Get chart dimensions relative to the page
-chart_rect = driver.execute_script("return arguments[0].getBoundingClientRect();", chart)
-start_x = chart_rect['left'] + 10  # Start 10px inside chart's left edge
-end_x = chart_rect['right'] - 10   # End 10px before chart's right edge
-y_position = chart_rect['top'] + (chart_rect['height'] / 2)  # Vertical center
+    # Configure scanning parameters
+    SCAN_START_X = 50
+    SCAN_END_X = chart_rect['width'] - 50
+    SCAN_Y = chart_rect['height'] * 0.3  # 30% from top
+    current_x = SCAN_START_X
+    data = []
+    headers = set()
 
-# Configure scanning parameters
-step = 1  # Step size in pixels
-max_step = 50  # Maximum jump when no data found
-current_step = step
-data = []
-previous_date = None
+    # Enhanced event simulation script
+    hover_script = """
+    // Update visual indicator
+    const dot = document.getElementById('hoverDot');
+    dot.style.left = `${arguments[0] - 4}px`;
+    dot.style.top = `${arguments[1] - 4}px`;
+    dot.style.display = 'block';
 
-# Simulate mouse movement
-actions = ActionChains(driver)
-current_x = start_x
+    // Create synthetic hover event sequence
+    const target = document.elementFromPoint(arguments[0], arguments[1]);
+    if (target) {
+        // Full event sequence for tooltip activation
+        ['mouseover', 'mousemove', 'mouseenter'].forEach(type => {
+            target.dispatchEvent(new MouseEvent(type, {
+                bubbles: true,
+                clientX: arguments[0],
+                clientY: arguments[1],
+                view: window
+            }));
+        });
+    }
+    return target ? target.outerHTML : null;
+    """
 
-while current_x <= end_x:
-    try:
-        # Move mouse to current position
-        actions.move_by_offset(
-            current_x - driver.execute_script("return window.pageXOffset;"),
-            y_position - driver.execute_script("return window.pageYOffset;")
-        ).pause(0.1).perform()
+    while current_x <= SCAN_END_X:
+        try:
+            # Calculate coordinates within iframe
+            target_x = current_x
+            target_y = SCAN_Y
 
-        # Extract tooltip data
-        date_element = WebDriverWait(driver, 0.5).until(
-            EC.visibility_of_element_located((By.XPATH, '//*[@class="yLabelDrag"]'))
-        )
-        value_element = WebDriverWait(driver, 0.5).until(
-            EC.visibility_of_element_located((By.XPATH, '//*[@id="iChart-bodyLabels-cnt"]/div[2]/span[2]/span[1]'))
-        )
-        current_date = date_element.text.strip()
-        current_value = value_element.text.strip()
+            # Execute combined hover simulation and visual update
+            element_html = driver.execute_script(hover_script, target_x, target_y)
+            
+            if not element_html:
+                raise Exception("No element at coordinates")
 
-        if not current_date: continue
+            # Wait for tooltip stabilization
+            tooltip = WebDriverWait(driver, 1.5).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, "div.google-visualization-tooltip.visible"))
+            )
 
-        if current_date != previous_date:
-            data.append((current_date, current_value))
-            previous_date = current_date
-            current_step = step  # Reset step size
-            print(f"✅ Captured: {current_date} - {current_value}")
-        else:
-            current_step = min(current_step + 2, max_step)  # Accelerate
+            # Extract data (keep your existing code here)
+            date = tooltip.find_element(By.CSS_SELECTOR, "li:first-child span").text.strip()
+            entry = {"Date": date}
+            
+            for metric in tooltip.find_elements(By.CSS_SELECTOR, "li:not(:first-child)"):
+                spans = metric.find_elements(By.CSS_SELECTOR, "span.custom-label")
+                if len(spans) >= 2:
+                    key = spans[0].text.strip().rstrip(':')
+                    value = spans[1].text.strip()
+                    entry[key] = value
+                    headers.add(key)
+            
+            if not any(d['Date'] == date for d in data):
+                data.append(entry)
+                print(f"✅ Captured {date}")
+                current_x += 5  # Fine step after success
+            else:
+                current_x += 15  # Skip duplicates faster
 
-    except:
-        current_step = min(current_step + 5, max_step)  # Faster scan in empty areas
+        except Exception as e:
+            print(f"⚠️ Error at X={current_x}: {str(e)[:50]}")
+            current_x += 25  # Skip problematic areas
+            continue
 
-    finally:
-        current_x += current_step
-        actions.reset_actions()  # Clear previous move actions
+        finally:
+            # Update progress
+            progress = ((current_x - SCAN_START_X) / (SCAN_END_X - SCAN_START_X)) * 100
+            print(f"Progress: {min(progress, 100):.1f}%")
 
-    # Progress tracking
-    if current_x % 100 == 0:
-        print(f"Progress: {((current_x - start_x)/(end_x - start_x))*100:.1f}%")
-
-# Save data to CSV
-print(f"\nTotal records captured: {len(data)}")
-with open('polypropylene_prices.csv', 'w', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(['Date', 'Value'])  # Write header row
-    writer.writerows(data)  # Write all data rows
-
-driver.quit()
+finally:
+    # Cleanup and save data
+    driver.switch_to.default_content()
+    if data:
+        with open("pvc_data.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["Date"] + sorted(headers))
+            writer.writeheader()
+            writer.writerows(data)
+        print(f"✅ Saved {len(data)} records")
+    else:
+        print("❌ No data collected")
+    
+    driver.quit()
