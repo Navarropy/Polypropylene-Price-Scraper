@@ -1,59 +1,88 @@
+# diagram.py
+
+import os
+import glob
+import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import pywt
-from dateutil.parser import parse
 
-def parse_portuguese_date(date_str):
-    # Replace Portuguese month abbreviations with English equivalents
-    month_map = {
-        'jan.': 'Jan', 'fev.': 'Feb', 'mar.': 'Mar', 'abr.': 'Apr',
-        'mai.': 'May', 'jun.': 'Jun', 'jul.': 'Jul', 'ago.': 'Aug',
-        'set.': 'Sep', 'out.': 'Oct', 'nov.': 'Nov', 'dez.': 'Dec', 'z.': 'Dec'
-    }
-    for pt_month, en_month in month_map.items():
-        date_str = date_str.replace(pt_month, en_month)
-    date_parts = date_str.split()
-    return parse(date_parts[0] + ' ' + date_parts[-1])
+wavelet_name = 'cmor1.5-1.0'
+scales = np.arange(1, 128)
+sampling_period = 1  # daily? Or 1/12 monthly?
 
-# Load the CSV data and set the 'Date' column as the index
-df = pd.read_csv('pvc_data.csv', parse_dates=['Date'], date_parser=parse_portuguese_date,
-                 decimal=',', encoding='utf-8').set_index('Date')
+def sanitize_filename(name):
+    return re.sub(r'[\\/:*?"<>|]+', '_', name)
 
-# Select columns containing 'actual', clean, and convert to float
-actual_columns = [col for col in df.columns if 'actual' in col]
-actual_data = df[actual_columns].replace('', np.nan).ffill().astype(float)
+def generate_wavelet_diagram(df, product, output_path):
+    # This function always generates the figure
+    # (it's only called if we decide we want to overwrite or create new).
+    
+    df = df.sort_values('Date').dropna(subset=['Value'])
+    time_index = df['Date']
+    time_series = df['Value'].values
 
-# Normalize each column to the [0, 1] range
-normalized_data = (actual_data - actual_data.min()) / (actual_data.max() - actual_data.min())
+    fig = plt.figure(figsize=(14, 10))
+    fig.suptitle(f"Wavelet Scalogram - Product: {product}", fontsize=16)
 
-# Compute the aggregated signal as the average across all regions, then re-normalize
-aggregated_signal = normalized_data.mean(axis=1)
-aggregated_signal = (aggregated_signal - aggregated_signal.min()) / (aggregated_signal.max() - aggregated_signal.min())
+    gs = fig.add_gridspec(2, 2, width_ratios=[0.95, 0.05], height_ratios=[1, 3])
+    ax_time = fig.add_subplot(gs[0, 0])
+    ax_scalogram = fig.add_subplot(gs[1, 0], sharex=ax_time)
+    cbar_ax = fig.add_subplot(gs[:, 1])
 
-# Extract the aggregated time series and its time index
-aggregated_time_series = aggregated_signal.values
-time_index = aggregated_signal.index
+    # Time series
+    ax_time.plot(time_index, time_series, color='blue', linewidth=2)
+    ax_time.set(title='Time Series', ylabel='Value')
+    ax_time.grid(True)
 
-# Set Continuous Wavelet Transform parameters and compute the CWT
-wavelet_name = 'cmor1.5-1.0'      # Complex Morlet wavelet
-scales = np.arange(1, 128)        # Scale range
-sampling_period = 1/12            # Monthly data (in years)
-cwt_coefficients, _ = pywt.cwt(aggregated_time_series, scales, wavelet_name, sampling_period=sampling_period)
-wavelet_power = np.abs(cwt_coefficients)**2
-wavelet_power[wavelet_power == 0] = 1e-6  # Prevent log(0)
-log_wavelet_power = np.log10(wavelet_power)
+    # Wavelet transform
+    cwt_coeffs, _ = pywt.cwt(time_series, scales, wavelet_name, sampling_period=sampling_period)
+    wavelet_power = np.abs(cwt_coeffs)**2
+    wavelet_power[wavelet_power == 0] = 1e-6
+    log_wavelet_power = np.log10(wavelet_power)
 
-# Create plots: time series (top) and scalogram (bottom)
-fig, (ax_time, ax_scalogram) = plt.subplots(2, 1, figsize=(14, 10), sharex=True,
-                                            gridspec_kw={'height_ratios': [1, 3]})
-ax_time.plot(time_index, aggregated_time_series, color='blue', linewidth=2)
-ax_time.set(title='Aggregated Normalized Signal in Time', ylabel='Normalized Value', ylim=(0, 1))
-ax_time.grid(True)
+    # Scalogram
+    contour = ax_scalogram.contourf(
+        time_index,
+        np.log2(scales),
+        log_wavelet_power,
+        100,
+        cmap='viridis'
+    )
+    ax_scalogram.set(title='Scalogram (CWT)', xlabel='Date', ylabel='Scale (log2)')
+    ax_scalogram.grid(True)
 
-contour = ax_scalogram.contourf(time_index, np.log2(scales), log_wavelet_power, 100, cmap='viridis')
-ax_scalogram.set(title='Scalogram (Continuous Wavelet Transform)', xlabel='Date', ylabel='Scale (log2)')
-plt.colorbar(contour, ax=ax_scalogram, label='Log10 Wavelet Power')
+    fig.colorbar(contour, cax=cbar_ax, label='Log10 Wavelet Power')
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
 
-plt.tight_layout()
-plt.show()
+def generate_diagrams(normalized_folder='normalized_files', diagrams_folder='diagrams'):
+    if not os.path.exists(diagrams_folder):
+        os.makedirs(diagrams_folder)
+
+    all_files = glob.glob(os.path.join(normalized_folder, '*_normalized.csv'))
+    if not all_files:
+        print(f"No normalized files found in '{normalized_folder}'.")
+        return
+
+    for csv_file in all_files:
+        print(f"\nGenerating wavelet diagrams from: {csv_file}")
+        df = pd.read_csv(csv_file, parse_dates=['Date'])
+        base_name = os.path.splitext(os.path.basename(csv_file))[0]
+
+        for product, sub_df in df.groupby('Product'):
+            safe_product = sanitize_filename(product)
+            out_name = f"{base_name}__{safe_product}.png"
+            out_path = os.path.join(diagrams_folder, out_name)
+
+            # --------------- SKIP CHECK ---------------
+            if os.path.exists(out_path):
+                print(f"   -> Diagram already exists, skipping: {out_path}")
+                continue
+            # ------------------------------------------
+
+            # If the file does not exist, generate it
+            generate_wavelet_diagram(sub_df, product, out_path)
+            print(f"   -> Diagram saved: {out_path}")
