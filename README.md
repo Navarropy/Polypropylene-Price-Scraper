@@ -162,7 +162,8 @@ Below is an overview of each file in the project and what it does.
   - The forecast and component plots will be saved in the `regression_plots/` folder (or as configured).
 
 ![pvc_data_normalized__U S A  outlook__forecast](https://github.com/user-attachments/assets/de988ec4-8dd3-4d35-be51-b061fc2e4274)
-![pvc_data_normalized__U S A  outlook__forecast](https://github.com/user-attachments/assets/15419ff2-ac51-4f5b-8d36-3bea243614df)
+![pvc_data_normalized__U S A  outlook__components](https://github.com/user-attachments/assets/2c7dc076-5c80-46e9-a5d8-7e5e1e641367)
+
 
 
 ---
