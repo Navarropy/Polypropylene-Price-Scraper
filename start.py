@@ -5,7 +5,7 @@ import forecast  # <-- import your Prophet script
 
 if __name__ == '__main__':
     # 1) Normalize
-    normalization.process_data_folder('data', 'normalized_files')
+    normalization.process_folder('data', 'normalized_files')
     print("\nNormalization complete!")
     
     # 2) Continuous Wavelet Diagrams from normalized
